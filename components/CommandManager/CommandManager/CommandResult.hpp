@@ -22,7 +22,7 @@ public:
   CommandResult(std::string message, const Status status)
   {
     this->status = status;
-    
+
     // Escape quotes and backslashes in the message for JSON
     std::string escapedMessage = message;
     size_t pos = 0;
@@ -37,15 +37,14 @@ public:
       escapedMessage.replace(pos, 1, "\\\"");
       pos += 2;
     }
-    
+
     if (status == Status::SUCCESS)
     {
-      // we gotta do it this way, because if we define it as { "result": " {} " } it crashes the compiler, lol
-      this->message = std::format("{}\"result\":\"{}\"{}",  "{", escapedMessage, "}");
+      this->message = std::format("{{\"result\":\"{}\"}}", escapedMessage);
     }
     else
     {
-      this->message = std::format("{}\"error\":\"{}\"{}",  "{", escapedMessage, "}");
+      this->message = std::format("{{\"error\":\"{}\"}}", escapedMessage);
     }
   }
 
@@ -60,7 +59,7 @@ public:
   {
     return CommandResult(message, Status::FAILURE);
   }
-  
+
   // Create a result that returns raw JSON without wrapper
   static CommandResult getRawJsonResult(const std::string &jsonMessage)
   {
@@ -70,7 +69,6 @@ public:
   }
 
   std::string getResult() const { return this->message; }
-  
 };
 
 #endif
