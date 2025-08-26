@@ -77,7 +77,9 @@ std::function<CommandResult()> CommandManager::createCommand(const CommandType t
 
 CommandResult CommandManager::executeFromJson(const std::string_view json) const
 {
-  cJSON *parsedJson = cJSON_Parse(json.data());
+  // Convert string_view to null-terminated string for cJSON_Parse
+  std::string json_str(json);
+  cJSON *parsedJson = cJSON_Parse(json_str.c_str());
   if (parsedJson == nullptr)
     return CommandResult::getErrorResult("Initial JSON Parse: Invalid JSON");
 

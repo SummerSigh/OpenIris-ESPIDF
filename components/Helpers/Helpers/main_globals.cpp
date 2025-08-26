@@ -1,5 +1,6 @@
 #include "main_globals.hpp"
 #include "esp_log.h"
+#include <CommandManager.hpp>
 
 // Forward declarations
 extern void start_video_streaming(void *arg);
@@ -47,4 +48,17 @@ void activateStreaming(bool disableSetup)
     void *serialTaskHandle = (serialHandle && *serialHandle) ? *serialHandle : nullptr;
 
     start_video_streaming(serialTaskHandle);
+}
+
+// Global command manager
+static std::shared_ptr<CommandManager> g_command_manager = nullptr;
+
+std::shared_ptr<CommandManager> getGlobalCommandManager()
+{
+    return g_command_manager;
+}
+
+void setGlobalCommandManager(std::shared_ptr<CommandManager> manager)
+{
+    g_command_manager = manager;
 }

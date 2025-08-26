@@ -1,4 +1,7 @@
 #include "UVCStream.hpp"
+#include "tusb.h"
+#include <CommandManager.hpp>
+#include <main_globals.hpp>
 constexpr int UVC_MAX_FRAMESIZE_SIZE(75 * 1024);
 
 static const char *UVC_STREAM_TAG = "[UVC DEVICE]";
@@ -134,6 +137,7 @@ esp_err_t UVCStreamManager::setup()
       .fb_get_cb = UVCStreamHelpers::camera_fb_get_cb,
       .fb_return_cb = UVCStreamHelpers::camera_fb_return_cb,
       .stop_cb = UVCStreamHelpers::camera_stop_cb,
+      .cb_ctx = nullptr,
   };
 
   esp_err_t ret = uvc_device_config(0, &config);
@@ -161,4 +165,57 @@ esp_err_t UVCStreamManager::start()
   ESP_LOGI(UVC_STREAM_TAG, "Starting UVC streaming");
   // UVC device is already initialized in setup(), just log that we're starting
   return ESP_OK;
+}
+
+extern "C" void uvc_cdc_rx_callback(const uint8_t* buffer, size_t length)
+{
+  ESP_LOGI(UVC_STREAM_TAG, "=== CDC CALLBACK START ===");
+  ESP_LOGI(UVC_STREAM_TAG, "CDC RX: length=%zu, data='%.*s'", length, (int)length, buffer);
+  
+  // Get the global command manager instance
+  auto commandManager = getGlobalCommandManager();
+  ESP_LOGI(UVC_STREAM_TAG, "Command manager available: %s", commandManager ? "YES" : "NO");
+  
+  if (commandManager) {
+    // Convert to string and clean up
+    std::string command_str(reinterpret_cast<const char*>(buffer), length);
+    ESP_LOGI(UVC_STREAM_TAG, "Original command string: '%s'", command_str.c_str());
+    
+    // Remove newline characters if present
+    size_t end = command_str.find_last_not_of("\r\n");
+    if (end != std::string::npos) {
+      command_str = command_str.substr(0, end + 1);
+    }
+    
+    ESP_LOGI(UVC_STREAM_TAG, "Cleaned command string: '%s'", command_str.c_str());
+    ESP_LOGI(UVC_STREAM_TAG, "Calling commandManager->executeFromJson()");
+    
+    // Process the command using the existing command manager
+    const auto result = commandManager->executeFromJson(std::string_view(command_str));
+    const auto resultMessage = result.getResult();
+    
+    ESP_LOGI(UVC_STREAM_TAG, "Command execution result: '%s'", resultMessage.c_str());
+    
+    // Send response back through CDC virtual serial port
+    if (tud_cdc_connected()) {
+      ESP_LOGI(UVC_STREAM_TAG, "CDC connected, sending response");
+      tud_cdc_write(resultMessage.c_str(), resultMessage.length());
+      tud_cdc_write_flush();
+      ESP_LOGI(UVC_STREAM_TAG, "Response sent via CDC");
+    } else {
+      ESP_LOGE(UVC_STREAM_TAG, "CDC not connected, cannot send response");
+    }
+    
+    ESP_LOGI(UVC_STREAM_TAG, "CDC Response: %s", resultMessage.c_str());
+  } else {
+    ESP_LOGE(UVC_STREAM_TAG, "Command manager not available - sending error response");
+    
+    const char* error_response = "{\"error\":\"Command manager not available\"}\n";
+    if (tud_cdc_connected()) {
+      tud_cdc_write(error_response, strlen(error_response));
+      tud_cdc_write_flush();
+    }
+  }
+  
+  ESP_LOGI(UVC_STREAM_TAG, "=== CDC CALLBACK END ===");
 }

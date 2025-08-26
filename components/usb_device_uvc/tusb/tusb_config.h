@@ -95,6 +95,16 @@ extern "C" {
 
 //------------- CLASS -------------//
 
+// Enable CDC (Communication Device Class) for virtual serial port
+#define CFG_TUD_CDC              1
+
+// CDC FIFO size of TX and RX
+#define CFG_TUD_CDC_RX_BUFSIZE   256
+#define CFG_TUD_CDC_TX_BUFSIZE   256
+
+// CDC Endpoint transfer buffer size, more is faster
+#define CFG_TUD_CDC_EP_BUFSIZE   64
+
 // The number of video control interfaces
 // The number of video streaming interfaces
 #if CONFIG_UVC_SUPPORT_TWO_CAM

@@ -35,7 +35,7 @@ QueueHandle_t ledStateQueue = xQueueCreate(10, sizeof(uint32_t));
 
 auto *stateManager = new StateManager(eventQueue, ledStateQueue);
 auto dependencyRegistry = std::make_shared<DependencyRegistry>();
-auto commandManager = std::make_shared<CommandManager>(dependencyRegistry);
+std::shared_ptr<CommandManager> commandManager = std::make_shared<CommandManager>(dependencyRegistry);
 
 WebSocketLogger webSocketLogger;
 Preferences preferences;
@@ -228,6 +228,9 @@ extern "C" void app_main(void)
     dependencyRegistry->registerService<ProjectConfig>(DependencyType::project_config, deviceConfig);
     dependencyRegistry->registerService<CameraManager>(DependencyType::camera_manager, cameraHandler);
     dependencyRegistry->registerService<WiFiManager>(DependencyType::wifi_manager, wifiManager);
+    
+    // Set global command manager for CDC access
+    setGlobalCommandManager(commandManager);
     // uvc plan
     // cleanup the logs - done
     // prepare the camera to be initialized with UVC - done?
@@ -324,23 +327,51 @@ extern "C" void app_main(void)
         1, // it's the rest API, we only serve commands over it so we don't really need a higher priority
         nullptr);
 
-    // New flow: Device starts with a 20-second delay before automatic mode startup
-    ESP_LOGI("[MAIN]", "=====================================");
-    ESP_LOGI("[MAIN]", "STARTUP: 20-SECOND DELAY MODE ACTIVE");
-    ESP_LOGI("[MAIN]", "=====================================");
-    ESP_LOGI("[MAIN]", "Device will wait 20 seconds for commands...");
-
-    // Create a one-shot timer for 20 seconds
-    const esp_timer_create_args_t startup_timer_args = {
-        .callback = &startup_timer_callback,
-        .arg = nullptr,
-        .dispatch_method = ESP_TIMER_TASK,
-        .name = "startup_timer",
-        .skip_unhandled_events = false};
-
-    ESP_ERROR_CHECK(esp_timer_create(&startup_timer_args, &timerHandle));
-    ESP_ERROR_CHECK(esp_timer_start_once(timerHandle, CONFIG_GENERAL_UVC_DELAY * 1000000));
-    ESP_LOGI("[MAIN]", "Started 20-second startup timer");
-    ESP_LOGI("[MAIN]", "Send any command within 20 seconds to enter heartbeat mode");
     setSerialManagerHandle(&serialManagerHandle);
+
+    // Check if a specific mode has been configured
+    StreamingMode deviceMode = deviceConfig->getDeviceMode();
+    bool modeConfigured = (deviceMode != StreamingMode::AUTO);
+
+    if (modeConfigured) {
+        ESP_LOGI("[MAIN]", "=====================================");
+        ESP_LOGI("[MAIN]", "CONFIGURED MODE DETECTED - STARTING IMMEDIATELY");
+        ESP_LOGI("[MAIN]", "=====================================");
+        ESP_LOGI("[MAIN]", "Device mode: %d, starting without delay...", (int)deviceMode);
+        
+        // Start immediately without timer
+        if (deviceMode == StreamingMode::UVC) {
+            // For UVC mode, start streaming right away but keep serial manager running for CDC commands
+            activate_streaming(nullptr);  // Don't disable serial manager for UVC mode
+        } else if (deviceMode == StreamingMode::WIFI) {
+            // For WiFi mode, check if credentials are available and connected
+            bool hasWifiCredentials = !deviceConfig->getWifiConfigs().empty() || strcmp(CONFIG_WIFI_SSID, "") != 0;
+            if (hasWifiCredentials) {
+                // Wait a moment for WiFi to connect if credentials exist
+                vTaskDelay(pdMS_TO_TICKS(3000));  // 3 second delay for WiFi connection
+                activate_streaming(serialManagerHandle);  // Can disable serial manager for WiFi mode
+            } else {
+                ESP_LOGI("[MAIN]", "WiFi mode configured but no credentials - staying in setup mode");
+            }
+        }
+    } else {
+        // AUTO mode or no specific mode configured - use 20-second delay
+        ESP_LOGI("[MAIN]", "=====================================");
+        ESP_LOGI("[MAIN]", "STARTUP: 20-SECOND DELAY MODE ACTIVE");
+        ESP_LOGI("[MAIN]", "=====================================");
+        ESP_LOGI("[MAIN]", "Device will wait 20 seconds for commands...");
+
+        // Create a one-shot timer for 20 seconds
+        const esp_timer_create_args_t startup_timer_args = {
+            .callback = &startup_timer_callback,
+            .arg = nullptr,
+            .dispatch_method = ESP_TIMER_TASK,
+            .name = "startup_timer",
+            .skip_unhandled_events = false};
+
+        ESP_ERROR_CHECK(esp_timer_create(&startup_timer_args, &timerHandle));
+        ESP_ERROR_CHECK(esp_timer_start_once(timerHandle, CONFIG_GENERAL_UVC_DELAY * 1000000));
+        ESP_LOGI("[MAIN]", "Started 20-second startup timer");
+        ESP_LOGI("[MAIN]", "Send any command within 20 seconds to enter heartbeat mode");
+    }
 }

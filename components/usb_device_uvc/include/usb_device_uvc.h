@@ -88,6 +88,14 @@ esp_err_t uvc_device_config(int index, uvc_device_config_t *config);
 esp_err_t uvc_device_init(void);
 
 /**
+ * @brief Callback function to handle CDC data reception from virtual serial port
+ * 
+ * @param buffer Received data buffer
+ * @param length Length of received data
+ */
+void uvc_cdc_rx_callback(const uint8_t* buffer, size_t length);
+
+/**
  * @brief Deinitialize the UVC device
  * @note  This function is not implemented yet because tinyusb does not support deinitialization
  * @return ESP_OK on success

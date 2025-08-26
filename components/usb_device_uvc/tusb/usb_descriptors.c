@@ -143,15 +143,22 @@ uint8_t const *tud_descriptor_device_cb(void)
 #define TUD_CAM2_VIDEO_CAPTURE_DESC_LEN 0
 #endif
 
-#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_CAM1_VIDEO_CAPTURE_DESC_LEN + TUD_CAM2_VIDEO_CAPTURE_DESC_LEN)
-#define EPNUM_CAM1_VIDEO_IN 0x81
+#define CONFIG_TOTAL_LEN (TUD_CONFIG_DESC_LEN + TUD_CDC_DESC_LEN + TUD_CAM1_VIDEO_CAPTURE_DESC_LEN + TUD_CAM2_VIDEO_CAPTURE_DESC_LEN)
+#define EPNUM_CDC_NOTIF   0x81
+#define EPNUM_CDC_OUT     0x02
+#define EPNUM_CDC_IN      0x82
+#define EPNUM_CAM1_VIDEO_IN 0x83
 #if CONFIG_UVC_SUPPORT_TWO_CAM
-#define EPNUM_CAM2_VIDEO_IN 0x82
+#define EPNUM_CAM2_VIDEO_IN 0x84
 #endif
 
 uint8_t const desc_fs_configuration[] = {
     // Config number, interface count, string index, total length, attribute, power in mA
     TUD_CONFIG_DESCRIPTOR(1, ITF_NUM_TOTAL, 0, CONFIG_TOTAL_LEN, 0, 500),
+
+    // CDC Control Interface
+    TUD_CDC_DESCRIPTOR(ITF_NUM_CDC, 6, EPNUM_CDC_NOTIF, 8, EPNUM_CDC_OUT, EPNUM_CDC_IN, 64),
+
 // IAD for Video Control
 #if CFG_TUD_CAM1_VIDEO_STREAMING_BULK
 #if CONFIG_UVC_CAM1_MULTI_FRAMESIZE
@@ -271,8 +278,9 @@ char const *string_desc_arr[] = {
     CONFIG_TUSB_SERIAL_NUM,     // 3: Serials, should use chip ID, overridden with get_serial_number()
     "UVC CAM1",                 // 4: UVC Interface, default, because we're overriding it get_uvc_device_name(), but we still have to keep the structure
 #if CONFIG_UVC_SUPPORT_TWO_CAM
-    "UVC CAM2", // 5: UVC Interface
+    "UVC CAM2",                 // 5: UVC Interface
 #endif
+    "OpenIris CDC",             // 6: CDC Interface
 };
 
 static uint16_t _desc_str[32];

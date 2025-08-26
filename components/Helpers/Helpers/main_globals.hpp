@@ -5,6 +5,10 @@
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
+#include <memory>
+
+// Forward declarations
+class CommandManager;
 
 // Functions for main to set global handles
 
@@ -20,5 +24,9 @@ void setStartupCommandReceived(bool startupCommandReceived);
 
 bool getStartupPaused();
 void setStartupPaused(bool startupPaused);
+
+// Command Manager access
+std::shared_ptr<CommandManager> getGlobalCommandManager();
+void setGlobalCommandManager(std::shared_ptr<CommandManager> manager);
 
 #endif

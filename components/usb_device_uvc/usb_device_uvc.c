@@ -5,6 +5,7 @@
  */
 #include <string.h>
 #include <inttypes.h>
+#include <stdint.h>
 #include "freertos/FreeRTOS.h"
 #include "freertos/task.h"
 #include "esp_timer.h"
@@ -99,6 +100,80 @@ void tud_resume_cb(void)
 {
     ESP_LOGI(TAG, "Resume");
 }
+
+//--------------------------------------------------------------------+
+// USB CDC
+//--------------------------------------------------------------------+
+#if (CFG_TUD_CDC)
+// External callback to handle CDC data
+extern void uvc_cdc_rx_callback(const uint8_t* buffer, size_t length);
+
+static char cdc_rx_buffer[512] = {0};
+static size_t cdc_rx_pos = 0;
+
+void tud_cdc_rx_cb(uint8_t itf)
+{
+    (void) itf;
+    
+    uint8_t buf[64];
+    uint32_t count = tud_cdc_available();
+    if (count > 0) 
+    {
+        uint32_t bytes_read = tud_cdc_read(buf, sizeof(buf));
+        if (bytes_read > 0)
+        {
+            // Accumulate data in buffer
+            for (uint32_t i = 0; i < bytes_read && cdc_rx_pos < sizeof(cdc_rx_buffer) - 1; i++)
+            {
+                cdc_rx_buffer[cdc_rx_pos++] = buf[i];
+                
+                // Check for complete command (newline or end of JSON)
+                if (buf[i] == '\n' || buf[i] == '\r')
+                {
+                    cdc_rx_buffer[cdc_rx_pos - 1] = '\0'; // Replace newline with null terminator
+                    
+                    // Process complete command
+                    if (cdc_rx_pos > 1)
+                    {
+                        uvc_cdc_rx_callback((const uint8_t*)cdc_rx_buffer, cdc_rx_pos - 1);
+                    }
+                    
+                    // Reset buffer
+                    cdc_rx_pos = 0;
+                    cdc_rx_buffer[0] = '\0';
+                    return;
+                }
+            }
+            
+            // If buffer is getting full without newline, process anyway
+            if (cdc_rx_pos >= sizeof(cdc_rx_buffer) - 1)
+            {
+                cdc_rx_buffer[cdc_rx_pos] = '\0';
+                uvc_cdc_rx_callback((const uint8_t*)cdc_rx_buffer, cdc_rx_pos);
+                cdc_rx_pos = 0;
+                cdc_rx_buffer[0] = '\0';
+            }
+        }
+    }
+}
+
+void tud_cdc_line_state_cb(uint8_t itf, bool dtr, bool rts)
+{
+    (void) itf;
+    (void) dtr; 
+    (void) rts;
+    
+    ESP_LOGI(TAG, "CDC line state changed: DTR=%d, RTS=%d", dtr, rts);
+}
+
+void tud_cdc_line_coding_cb(uint8_t itf, cdc_line_coding_t const* p_line_coding)
+{
+    (void) itf;
+    ESP_LOGI(TAG, "CDC line coding: %" PRIu32 " bps, %d stop bits, %d parity, %d data bits", 
+             p_line_coding->bit_rate, p_line_coding->stop_bits, 
+             p_line_coding->parity, p_line_coding->data_bits);
+}
+#endif
 
 #if (CFG_TUD_VIDEO)
 //--------------------------------------------------------------------+
